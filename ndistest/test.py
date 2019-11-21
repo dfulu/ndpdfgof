@@ -37,6 +37,7 @@ def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
                     x_upper = x
                     x = (x_lower+x_upper)//2
             else:
+                x_lower = x
                 if x==x_max:
                     warnings.warn("Max argument reached: returning x_max")
                     min_x_found = True
@@ -44,7 +45,6 @@ def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
                     x = x_upper
                     min_x_found = True
                 else:
-                    x_lower = x
                     if x_upper is None:
                         x = min(x*2, x_max)
                     else:
