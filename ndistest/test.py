@@ -13,10 +13,20 @@ from sklearn.utils import shuffle as sk_shuffle
 
 def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
     """Find minimum integer with function evaluation greater 
-    than some threshold."""
-    x = int(x0)
-    x_lower = x0-1 # highest value that is still correlated
-    x_upper = None # lowest value which is not correlated
+    than some threshold. Function is assued to be increasing with 
+    x and also that x cannot be less than 1"""
+    x_lower = None # highest argument evaluated as below threshold
+    x_upper = None # lowest argument evaluated as above threshold
+    
+    val0 = func(x0, *args)
+    if val0 > thresh:
+        x_lower = 0
+        x_upper = x0
+        x = (x_lower+x_upper)//2
+    else:
+        x_lower = x0
+        x=x0*2
+        
     min_x_found = False
     while not min_x_found:
             val = func(x, *args)
@@ -25,20 +35,20 @@ def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
                     min_x_found = True
                 else:
                     x_upper = x
-                    x = int((x_lower+x_upper)/2)
+                    x = (x_lower+x_upper)//2
             else:
-                if x > x_lower:
+                if x==x_max:
+                    warnings.warn("Max argument reached: returning x_max")
+                    min_x_found = True
+                elif x_upper==x_lower+1:
+                    x = x_upper
+                    min_x_found = True
+                else:
                     x_lower = x
                     if x_upper is None:
-                        x = x*2
+                        x = min(x*2, x_max)
                     else:
-                        x = int((x_lower+x_upper)/2)       
-            if x_upper==x_lower+1:
-                x = x_upper
-                min_x_found = True
-            if x_lower>=x_max:
-                raise ValueError('exceeded_max')
-            
+                        x = (x_lower+x_upper)//2      
     return x
 
 
