@@ -11,21 +11,47 @@ from scipy.stats import norm
 from math import factorial
 from sklearn.utils import shuffle as sk_shuffle
 
-def generate_nonmultiple_primes(maxnum, minnum=1, forbiddenmultiples=[]):
+
+
+class generate_nonmultiple_primes:
     """Generate prime numbers which are not multiples of those specified"""
-    # Initialize a list
-    for n in range(max(1, minnum), maxnum+1):
+    
+    def __init__(self, maxnum, minnum=1, n0=1, forbiddenmultiples=[]):
+        self.n = n0
+        self.maxnum = maxnum
+        self.minnum = minnum
+        self.forbiddenmultiples = forbiddenmultiples
+        
+    def next(self):
+        for n in range(self.n+1, self.maxnum+1):
 
-        # Assume number is prime until shown it is not. 
-        isSoln = not any([(mult%n==0)&(n!=1) for mult in forbiddenmultiples])
-        if isSoln:
-            for num in range(2, int(n ** 0.5) + 1):
-                if n % num == 0:
-                    isSoln = False
-                    break
+            # Assume number is prime until shown it is not. 
+            isSoln = not any([(mult%n==0)&(n!=1) for mult in self.forbiddenmultiples])
+            if isSoln:
+                for num in range(2, int(n ** 0.5) + 1):
+                    if n % num == 0:
+                        isSoln = False
+                        break
+            if isSoln:
+                self.n = n
+                return n
+        raise StopIteration("max value exceeded")
+        
+    def prev(self):
+        for n in range(self.minnum, self.n)[::-1]:
 
-        if isSoln:
-            yield n
+            # Assume number is prime until shown it is not. 
+            isSoln = not any([(mult%n==0)&(n!=1) for mult in self.forbiddenmultiples])
+            if isSoln:
+                for num in range(2, int(n ** 0.5) + 1):
+                    if n % num == 0:
+                        isSoln = False
+                        break
+            if isSoln:
+                self.n = n
+                return n
+            
+        raise StopIteration("min value exceeded")
 
 def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
     """Find minimum integer with function evaluation greater 
@@ -522,7 +548,7 @@ class mixed_sample_test:
         
     def show_results(self):
         """Print table of the test results"""
-        divider_row = ["-"*10, "-"*10]
+        divider_row = ["-"*18, "-"*18]
         floform = lambda x: "{:.3f}".format(x)
         t = PrettyTable(['variable', 'value'])
         mu_cn, sigma_cn = bound_expected_consec_neigh(self.n,self.n_k)
