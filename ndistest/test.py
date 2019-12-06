@@ -11,6 +11,21 @@ from scipy.stats import norm
 from math import factorial
 from sklearn.utils import shuffle as sk_shuffle
 
+def generate_nonmultiple_primes(maxnum, minnum=1, forbiddenmultiples=[]):
+    """Generate prime numbers which are not multiples of those specified"""
+    # Initialize a list
+    for n in range(max(1, minnum), maxnum+1):
+
+        # Assume number is prime until shown it is not. 
+        isSoln = not any([(mult%n==0)&(n!=1) for mult in forbiddenmultiples])
+        if isSoln:
+            for num in range(2, int(n ** 0.5) + 1):
+                if n % num == 0:
+                    isSoln = False
+                    break
+
+        if isSoln:
+            yield n
 
 def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
     """Find minimum integer with function evaluation greater 
@@ -137,7 +152,7 @@ class _mst_history:
             'T':self.T,
             'sigma_T':self.sigma_T,
             'p_value_T':self.p_value_T,
-            'cn':self.cn,
+            'cn':self.consecutive_neighbour,
             'p_value_cn':self.p_value_cn
         })
         return df
@@ -216,6 +231,32 @@ class mixed_sample_test:
         indices = indices[indices!=i]
         return indices
     
+    
+    def _calculate_consecutive_neighbours(self, sample, n_k, log_matches, 
+                                          progbar=None, bar_step=100):
+        n = len(sample)
+        if log_matches:
+            matches = np.zeros(n*n_k)
+        else:
+            matches = None
+        
+        consecutive_neighbour = 0
+            
+        # core mixed sample method
+        for i in range(n):
+            indices = self._closest_indices(i, sample, n_k)
+            for j, ind in enumerate(indices):
+                if log_matches:
+                    matches[i*n_k+j]= ind - i
+                if i-n_k<=ind<=i+n_k:
+                    consecutive_neighbour+=1
+                    
+            if progbar is not None and i%bar_step==0 and i!=0:
+                progbar.update(progbar.value+bar_step)
+                    
+        return consecutive_neighbour, matches
+    
+    
     def _calculate_mixed_sample_statistic(self, mixed_samples, classes, 
                                           n_k, log_matches, progbar=None,bar_step=100):
         n = len(mixed_samples)
@@ -236,139 +277,205 @@ class mixed_sample_test:
                     neighbour_same_class+=1
                     if log_matches:
                         matches[i*n_k+j]= ind - i
+                    if i-n_k<=ind<=i+n_k:
+                        consecutive_neighbour+=1
                 else:
                     if log_matches:
                         matches[i*n_k+j]= np.nan
-                        
-                if i-n_k<=ind<=i+n_k:
-                    consecutive_neighbour+=1
                     
             if progbar is not None and i%bar_step==0 and i!=0:
                 progbar.update(progbar.value+bar_step)
                     
         return neighbour_same_class, consecutive_neighbour, matches
     
-    def _optimise_n_skip(self, n_skip, samples1, samples2, loop_n=False):
+    def _optimise_n_skip(self, n_skip, sample, loop_n=False):
             
-        n_a = len(samples1)//n_skip
-        n_b = len(samples2)//n_skip
-        n = n_a + n_b
-        mu_T = self._calculate_mu(n_a, n_b)
-        sigma_T = self._calculate_sigma(n_a, n_b, self.n_k)
+        n = len(sample)//n_skip
         mu_cn, sigma_cn = bound_expected_consec_neigh(n, self.n_k)
+        
         if loop_n:
-            neighbours_matched_list=[]
             cn_list=[]
-            T_list=[]
-            p_value_T_list=[]
             p_value_cn_list=[]
             bar = progressbar.ProgressBar(max_value=n*n_skip, prefix='skip : {} |'.format(n_skip))
             for i in range(n_skip):
+                
                 # data processing
-                mixed_samples = np.concatenate(
-                    (samples1[i:i+n_a*n_skip:n_skip],
-                     samples2[i:i+n_b*n_skip:n_skip]), axis=0)
-                classes = np.concatenate(
-                    (np.ones(n_a), np.zeros(n_b)), axis=0).astype(dtype=np.int32)
-
+                sample_i = sample[i:i+n_a*n_skip:n_skip]
+                
                 # run test
-                R = self._calculate_mixed_sample_statistic(mixed_samples, 
-                                                      classes, self.n_k, 
-                                                      log_matches=False,
-                                                      progbar=bar)
-                bar.update((i+1)*n)
-                # collect results
-                neighbours_matched = R[0]
-                cn = R[1]
+                cn, matches = self._calculate_consecutive_neighbours(sample_i, n_k, log_matches=False, 
+                                          progbar=bar, bar_step=100)
 
                 # post processing
-                T = (self.n_k*(n))**-1 * neighbours_matched
-                p_value_T = self._calculate_p_val(T, mu_T, sigma_T)
                 p_value_cn = 1-norm.cdf((cn-mu_cn)/sigma_cn)
                 
-                neighbours_matched_list+=[neighbours_matched]
                 cn_list+=[cn]
-                T_list+=[T]
-                p_value_T_list+=[p_value_T]
                 p_value_cn_list+=[p_value_cn]
                 
-            neighbours_matched = np.median(neighbours_matched_list)
+            bar.update(n*n_skip)
             cn = np.median(cn_list)
-            T = np.median(T_list)
-            p_value_T = np.median(p_value_T_list)
             p_value_cn = np.median(p_value_cn_list)
                 
         else:
-            # data processing
-            mixed_samples = np.concatenate(
-                (samples1[:n_a*n_skip:n_skip], samples2[:n_b*n_skip:n_skip]), axis=0)
-            classes = np.concatenate(
-                (np.ones(n_a), np.zeros(n_b)), axis=0).astype(dtype=np.int32)
-            
             bar = progressbar.ProgressBar(max_value=n, prefix='skip : {} |'.format(n_skip))
+            
+            # data processing
+            sample_i = sample[:n_a*n_skip:n_skip]
+
             # run test
-            R = self._calculate_mixed_sample_statistic(mixed_samples, 
-                                                  classes, self.n_k, 
-                                                  log_matches=False,
-                                                  progbar=bar)
-            # collect results
-            neighbours_matched = R[0]
-            cn = R[1]
+            cn, matches = self._calculate_consecutive_neighbours(sample_i, n_k, log_matches=False, 
+                                        progbar=None, bar_step=100)
+            bar.update(n)
 
             # post processing
-            T = (self.n_k*(n))**-1 * neighbours_matched
-            p_value_T = self._calculate_p_val(T, mu_T, sigma_T)
             p_value_cn = 1-norm.cdf((cn-mu_cn)/sigma_cn)
-
-        self.history.update(n_skip, n_a, n_b, neighbours_matched, 
-                           mu_T, T, sigma_T, p_value_T, cn, p_value_cn)
 
         return p_value_cn
             
     
-    def fit_gof(self, samples1, samples2, n_k, max_skip=100,
-                p_val=0.05, n_skip_0=1, loop_n=False):
+    def fit_gof(self, sample_a, sample_b, n_k, max_skip=100,
+                n_skip_0=1, p_val=0.05, loop_skip_opt=True,
+                loop_test_meth='simple'):
         """
+        Optimise skips and run GOF test.
+        
         Fit the number point time points that must be skipped
         to decorrelate the time series and complete the gof
         test.
+
+        Parameters
+        ----------
+        sample_a : (n_a, d) ndarray
+        sample_b : (n_a, d) ndarray
+        n_k : int
+            Number of most similar points to search for in test.
+        max_skip : int, optional
+            Maximum number of skips allowed.
+        n_skip_0 : int, optional
+            Best guess to the minimum number of skips needed to 
+            remove correlation.
+        p_val : float, optional
+            The target p-value for selecting minimum number of skips.
+        loop_skip_opt : bool, optional
+            Whether to perform loop in calculating minimum number of 
+            skips to increase accuracy of returned values.
+        loop_test_meth : {'simple', 'all2all', None}, optional
+            Behaviour to apply in calculating the test statistic.
+             - 'simple' - Use all uncorrelated sample subsets only once.
+             - 'all2all' - Run test between all uncorrelated subsets.
+             - None - Only run one subset test.
         """
+        assert loop_test_meth in {'simple', 'all2all', None}, "Invalid `loop_test_calc`"
         # instantiate variables
+        self.loop_skip_opt = loop_skip_opt
+        self.loop_test_meth = loop_test_meth
+        self.p_value_cn = p_val
         self.n_k = n_k
         self._fit(np.concatenate((samples1, samples2), axis=0))
         self.shuffled = False
-        self.history = _mst_history(p_val)
-        self.n_skip = min_int_gt(self._optimise_n_skip, 
-                        thresh=p_val, x0=n_skip_0, x_max=max_skip,
-                        args=(samples1, samples2, loop_n))
         
-        # retrieve variables
-        (_, self.n_a, self.n_b, self.neighbours_matched, self.mu_T, 
-         self.T, self.sigma_T, self.p_value, self.cn, self.p_value_cn) = \
-        self.history.getParams(self.n_skip)
+        # optimise skip
+        self.n_skip_a = min_int_gt(self._optimise_n_skip, 
+                        thresh=p_val, x0=n_skip_0, x_max=max_skip,
+                        args=(sample_a, loop_skip_opt))
+        self.n_skip_b = min_int_gt(self._optimise_n_skip, 
+                        thresh=p_val, x0=n_skip_0, x_max=max_skip,
+                        args=(sample_b, loop_skip_opt))
+        
+        # initiate more variables
+        self.n_a = len(sample_a)//self.n_skip_a
+        self.n_b = len(sample_b)//self.n_skip_b
         self.n = self.n_a + self.n_b
+        self.mu_T = self._calculate_mu(self.n_a, self.n_b)
+        self.sigma_T = self._calculate_sigma(self.n_a, self.n_b, self.n_k)
+
+        
+        classes = np.concatenate((
+            np.ones(self.n_a), 
+            np.zeros(self.n_b)), axis=0).astype(dtype=np.int32)
+
+        # loop over different uncorrelated data subsamples to get better 
+        # estimate for the test statistic
+        if loop_test_meth is not None:
+            nbour_same_class_list = []
+            consec_nbour_list = []
+            T_list = []
+            p_value_T_list = []
+            if loop_test_meth=='simple':
+                ijloop = [(i,i) for i in range(min(self.n_skip_a, self.n_skip_b))]
+            elif loop_test_meth=='all2all':
+                ijloop = [(i,i) for i in range(self.n_skip_a) for j in range(self.n_skip_b)]
+                
+            for i,j in ijloop:
+                mixed_samples = np.concatenate(
+                        (sample_a[i:i+self.n_a*self.n_skip_a:self.n_skip_a], 
+                         sample_b[j:j+self.n_b*self.n_skip_b:self.n_skip_b]), 
+                        axis=0)
+                # run test
+                R = self._calculate_mixed_sample_statistic(mixed_samples, classes, 
+                                                  n_k, log_matches=False)
+                # collect results
+                nbour_same_class_list.append(R[0])
+                consec_nbour_list.append(R[1])
+
+                # post processing
+                T_list.append((self.n_k*(self.n))**-1 * R[0])
+                p_value_T_list.append(self._calculate_p_val(T_list[-1], self.mu_T, self.sigma_T))
+                
+            # collect results
+            self.neighbour_same_class = np.median(nbour_same_class_list)
+            self.consecutive_neighbour = np.median(consec_nbour_list)
             
+            # post processing
+            self.T = np.median(T_list)
+            self.p_value = np.median(p_value_T_list)
+            
+            # store lists too
+            self._T_list = T_list
+            self._p_value_list = p_value_T_list
+            self._neighbour_same_class_list = nbour_same_class_list
+            self._consecutive_neighbour_lists = consec_nbour_list
+                
+        else:
+            mixed_samples = np.concatenate(
+                (sample_a[:self.n_a*self.n_skip_a:self.n_skip_a], 
+                 sample_b[:self.n_b*self.n_skip_b:self.n_skip_b]), 
+                axis=0)
+            
+            # run test
+            R = self._calculate_mixed_sample_statistic(mixed_samples, classes, 
+                                              n_k, log_matches=False)
+            # collect results
+            self.neighbour_same_class = R[0]
+            self.consecutive_neighbour = R[1]
+
+            # post processing
+            self.T = (self.n_k*(self.n))**-1 * self.neighbour_same_class
+            self.p_value = self._calculate_p_val(self.T, self.mu_T, self.sigma_T)
+        
+        self.match_log=None
+
         return self.T, self.p_value
         
-    def gof(self, samples1, samples2, n_k, 
+    def gof(self, sample_a, sample_b, n_k, 
             shuffle=False, seed=None, 
             log_matches=False):
         """
         Carry out the test of goodness of fit between two samples
         """
         # data processing
-        mixed_samples = np.concatenate((samples1, samples2), axis=0)
+        mixed_samples = np.concatenate((sample_a, sample_b), axis=0)
         classes = np.concatenate((
-            np.ones(len(samples1)), 
-            np.zeros(len(samples2))), axis=0).astype(dtype=np.int32)
+            np.ones(len(sample_a)), 
+            np.zeros(len(sample_b))), axis=0).astype(dtype=np.int32)
         
         if shuffle:
             mixed_samples, classes = sk_shuffle(
                 mixed_samples, classes, random_state=seed)
             
         # instantiate variables
-        self.n_a = len(samples1)
-        self.n_b = len(samples2)
+        self.n_a = len(sample_a)
+        self.n_b = len(sample_b)
         self.n_k = n_k
         self.n = self.n_a + self.n_b
         self.mu_T = self._calculate_mu(self.n_a, self.n_b)
@@ -377,7 +484,7 @@ class mixed_sample_test:
         self.shuffled = shuffle
         
         # run test
-        R = _calculate_mixed_sample_statistic(mixed_samples, classes, 
+        R = self._calculate_mixed_sample_statistic(mixed_samples, classes, 
                                           n_k, log_matches)
         # collect results
         self.neighbour_same_class = R[0]
@@ -415,18 +522,31 @@ class mixed_sample_test:
         
     def show_results(self):
         """Print table of the test results"""
+        divider_row = ["-"*10, "-"*10]
+        floform = lambda x: "{:.3f}".format(x)
         t = PrettyTable(['variable', 'value'])
-        t.add_row(['p_value', self.p_value])
-        t.add_row(['T', self.T])
-        t.add_row(['mu_T', self.mu_T])
-        t.add_row(['sigma_T', self.sigma_T])
-        t.add_row(['pull', (self.T-self.mu_T)/self.sigma_T])
-        t.add_row(['n_a', self.n_a])
-        t.add_row(['n_b', self.n_b])
-        t.add_row(['Num. consec.', self.cn])
-        t.add_row(['expt. Num. consec.', '{:.2f} +- {:.2f}'.format(
-            *bound_expected_consec_neigh(self.n,self.n_k))])
-        t.add_row(['shuffled', self.shuffled])
+        mu_cn, sigma_cn = bound_expected_consec_neigh(self.n,self.n_k)
+        cn_pval = 1-norm.cdf((self.consecutive_neighbour-mu_cn)/sigma_cn)
+        t.add_row(['p_value', floform(self.p_value)])
+        t.add_row(['T', floform(self.T)])
+        t.add_row(['mu_T', floform(self.mu_T)])
+        t.add_row(['sigma_T', floform(self.sigma_T)])
+        t.add_row(['pull', floform((self.T-self.mu_T)/self.sigma_T)])
+        t.add_row(divider_row)
+        t.add_row(['n_a', "{} (x{}={})".format(
+            self.n_a, self.n_skip_a, self.n_a*self.n_skip_a)])
+        t.add_row(['n_b', "{} (x{}={})".format(
+            self.n_b, self.n_skip_b, self.n_b*self.n_skip_b)])        
+        t.add_row(['n_skip_a', self.n_skip_a])
+        t.add_row(['n_skip_b', self.n_skip_b])
+        t.add_row(['skip p-val target', self.p_value_cn])
+        t.add_row(divider_row)
+        t.add_row(['Num. consec.', self.consecutive_neighbour])
+        t.add_row(['Expt. Num. consec.', '{:.2f} +- {:.2f}'.format(mu_cn, sigma_cn)])
+        t.add_row(['Num. Consec p-val', floform(cn_pval)])
+        t.add_row(divider_row)
+        t.add_row(['looped skip optimisation', self.loop_skip_opt])
+        t.add_row(['decorrelated test method', self.loop_test_meth])
         print(t)
 
 
@@ -452,35 +572,30 @@ if __name__=='__main__':
     samples2 = dist1.sample(n_a, x0, burnin=100)
     samples3 = dist2.sample(n_a, x0, burnin=100)
     
-    mst1 = mixed_sample_test()
-    mst1.fit_gof(samples1, samples2, n_k=n_k, max_skip=max_skip, p_val=p_val_cn_limit, loop_n=True)
+    # sample distributions the same, using looping
+    mst1 = mixed_sample_test()    
+    mst1.fit_gof(samples1, samples2, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+                 loop_skip_opt=True, loop_test_meth='simple')
     mst1.show_results()
     
-    fig = mst1.history.plot(style='.', yscale='log')
-    plt.title('MCMC same dist - averaged skip')
-    plt.show()
-    
-    
+    # sample distributions the same, no looping
     mst2 = mixed_sample_test()
-    mst2.fit_gof(samples1, samples2, n_k=n_k, max_skip=max_skip, p_val=p_val_cn_limit, loop_n=False)
+    mst2.fit_gof(samples1, samples2, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+                 loop_skip_opt=False, loop_test_meth=None)    
     mst2.show_results()
-    fig = mst2.history.plot(style='.', yscale='log')
-    plt.title('MCMC same dist - single skip')
-    plt.show()
 
+
+    # sample distributions not the same, using looping
     mst3 = mixed_sample_test()
-    mst3.fit_gof(samples1, samples3, n_k=n_k, max_skip=max_skip, p_val=p_val_cn_limit, loop_n=True)
+    mst3.fit_gof(samples1, samples3, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+                 loop_skip_opt=True, loop_test_meth='all2all')
     mst3.show_results()
-    fig = mst3.history.plot(style='.', yscale='log')
-    plt.title('MCMC different dist - averaged skip')
-    plt.show()
     
+    # sample distributions not the same, no looping
     mst4 = mixed_sample_test()
-    mst4.fit_gof(samples1, samples3, n_k=n_k, max_skip=max_skip, p_val=p_val_cn_limit, loop_n=False)
+    mst4.fit_gof(samples1, samples3, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+                 loop_skip_opt=False, loop_test_meth=None) 
     mst4.show_results()
-    fig = mst4.history.plot(style='.', yscale='log')
-    plt.title('MCMC different dist - single skip')
-    plt.show()
     
 
 
