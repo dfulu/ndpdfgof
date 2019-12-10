@@ -170,7 +170,7 @@ def bound_pm(m,n,n_k):
 
 def bound_expected_consec_neigh(n,n_k):
     """
-    Assuming two samples from the same distribution with n total 
+    Assuming a samples from the same distribution with n total 
     samples, how many n_k smallest distance matches would you expect
     to find within distance n_k along the sample list.
     """
@@ -369,10 +369,10 @@ class mixed_sample_test:
             for i in range(n_skip):
                 
                 # data processing
-                sample_i = sample[i:i+n_a*n_skip:n_skip]
+                sample_i = sample[i:i+n*n_skip:n_skip]
                 
                 # run test
-                cn, matches = self._calculate_consecutive_neighbours(sample_i, n_k, log_matches=False, 
+                cn, matches = self._calculate_consecutive_neighbours(sample_i, self.n_k, log_matches=False, 
                                           progbar=bar, bar_step=100)
 
                 # post processing
@@ -392,7 +392,7 @@ class mixed_sample_test:
             sample_i = sample[:n_a*n_skip:n_skip]
 
             # run test
-            cn, matches = self._calculate_consecutive_neighbours(sample_i, n_k, log_matches=False, 
+            cn, matches = self._calculate_consecutive_neighbours(sample_i, self.n_k, log_matches=False, 
                                         progbar=None, bar_step=100)
             bar.update(n)
 
@@ -440,7 +440,7 @@ class mixed_sample_test:
         self.loop_test_meth = loop_test_meth
         self.p_value_cn = p_val
         self.n_k = n_k
-        self._fit(np.concatenate((samples1, samples2), axis=0))
+        self._fit(np.concatenate((sample_a, sample_b), axis=0))
         self.shuffled = False
         
         # optimise skip
@@ -629,9 +629,9 @@ if __name__=='__main__':
     from generate import gaussian, mcmc_distribution
     
     n_a = 2000
-    max_skip = 30
-    p_val_cn_limit = 0.05
-    n_k=6
+    mx_skp = 30
+    p_val_cn_lim = 0.05
+    n_K=6
     # Create samples and apply test
     ndims=5
     p1 = gaussian(np.ones(ndims), 1.5)
@@ -639,32 +639,32 @@ if __name__=='__main__':
     dist1 = mcmc_distribution(p1, ndims, np.ones(ndims), 0.)
     dist2 = mcmc_distribution(p2, ndims, np.ones(ndims), 0.)
     x0 = np.ones(ndims)
-    samples1 = dist1.sample(n_a, x0, burnin=100)
-    samples2 = dist1.sample(n_a, x0, burnin=100)
-    samples3 = dist2.sample(n_a, x0, burnin=100)
+    samples1_ = dist1.sample(n_a, x0, burnin=100)
+    samples2_ = dist1.sample(n_a, x0, burnin=100)
+    samples3_ = dist2.sample(n_a, x0, burnin=100)
     
     # sample distributions the same, using looping
     mst1 = mixed_sample_test()    
-    mst1.fit_gof(samples1, samples2, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+    mst1.fit_gof(samples1_, samples2_, n_K, n_skip_0=1, max_skip=mx_skp, p_val=p_val_cn_lim, 
                  loop_skip_opt=True, loop_test_meth='simple')
     mst1.show_results()
     
     # sample distributions the same, no looping
     mst2 = mixed_sample_test()
-    mst2.fit_gof(samples1, samples2, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+    mst2.fit_gof(samples1_, samples2_, n_K, n_skip_0=1, max_skip=mx_skp, p_val=p_val_cn_lim, 
                  loop_skip_opt=False, loop_test_meth=None)    
     mst2.show_results()
 
 
     # sample distributions not the same, using looping
     mst3 = mixed_sample_test()
-    mst3.fit_gof(samples1, samples3, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+    mst3.fit_gof(samples1_, samples3_, n_K, n_skip_0=1, max_skip=mx_skp, p_val=p_val_cn_lim, 
                  loop_skip_opt=True, loop_test_meth='all2all')
     mst3.show_results()
     
     # sample distributions not the same, no looping
     mst4 = mixed_sample_test()
-    mst4.fit_gof(samples1, samples3, n_k, n_skip_0=1, max_skip=max_skip, p_val=p_val_cn_limit, 
+    mst4.fit_gof(samples1_, samples3_, n_K, n_skip_0=1, max_skip=mx_skp, p_val=p_val_cn_lim, 
                  loop_skip_opt=False, loop_test_meth=None) 
     mst4.show_results()
     
