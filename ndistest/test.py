@@ -53,7 +53,7 @@ class generate_nonmultiple_primes:
             
         raise StopIteration("min value exceeded")
 
-def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
+def int_argmin_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
     """Find minimum integer with function evaluation greater 
     than some threshold. Function is assued to be increasing with 
     x and also that x cannot be less than 1"""
@@ -92,6 +92,49 @@ def min_int_gt(func, thresh=0.05, x0=1, x_max=100, args=(),):
                     else:
                         x = (x_lower+x_upper)//2      
     return x
+
+
+def prime_argmin_gt(func, thresh=0.05, x0=1, x_max=100, 
+               forbiddenmultiples=[12], args=()):
+    """Find minimum integer with function evaluation greater 
+    than some threshold which is prime and not a factor of 
+    given set of numbers. Function is assued to be increasing 
+    with x and also that x cannot be less than 1"""
+    x_lower = None # highest argument evaluated as below threshold
+    x_upper = None # lowest argument evaluated as above threshold
+    x = x0
+    g = generate_nonmultiple_primes(x_max, minnum=1, n0=x0, 
+                        forbiddenmultiples=forbiddenmultiples)
+    val0 = func(x, *args)
+    try:
+        if val0 > thresh:
+            x_lower = 0
+            x_upper = x0
+            x = g.prev() # if errors out then g.n == x0 is value
+        else:
+            x_lower = x0
+            x = g.next() # if errors out then g.n == x0 is value
+
+        min_x_found = False
+        while not min_x_found:
+                val = func(x, *args)
+                if val > thresh:
+                    x = g.prev() # if errors out g.n == x is value
+                    if x == x_lower:
+                        min_x_found = True
+                        x = g.next() # never errors
+                else:
+                    x_lower = x
+                    x = g.next() # if errors out g.n == x is value
+                    if x==x_upper:
+                        min_x_found = True
+                        x = g.prev() # never errors
+    except StopIteration as e:
+        print(e)
+        x = g.n
+    finally:
+        return x
+
 
 
 def pmc(m,n,n_k,c):
@@ -359,9 +402,9 @@ class mixed_sample_test:
         return p_value_cn
             
     
-    def fit_gof(self, sample_a, sample_b, n_k, max_skip=100,
-                n_skip_0=1, p_val=0.05, loop_skip_opt=True,
-                loop_test_meth='simple'):
+    def fit_gof(self, sample_a, sample_b, n_k, n_skip_0=1,
+                max_skip=100, p_val=0.05, loop_skip_opt=True,
+                periodics=[12], loop_test_meth='simple'):
         """
         Optimise skips and run GOF test.
         
@@ -401,11 +444,13 @@ class mixed_sample_test:
         self.shuffled = False
         
         # optimise skip
-        self.n_skip_a = min_int_gt(self._optimise_n_skip, 
+        self.n_skip_a = prime_argmin_gt(self._optimise_n_skip, 
                         thresh=p_val, x0=n_skip_0, x_max=max_skip,
+                        forbiddenmultiples=periodics,
                         args=(sample_a, loop_skip_opt))
-        self.n_skip_b = min_int_gt(self._optimise_n_skip, 
+        self.n_skip_b = prime_argmin_gt(self._optimise_n_skip, 
                         thresh=p_val, x0=n_skip_0, x_max=max_skip,
+                        forbiddenmultiples=periodics,
                         args=(sample_b, loop_skip_opt))
         
         # initiate more variables
