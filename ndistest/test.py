@@ -475,7 +475,7 @@ class mixed_sample_test:
             if loop_test_meth=='simple':
                 ijloop = [(i,i) for i in range(min(self.n_skip_a, self.n_skip_b))]
             elif loop_test_meth=='all2all':
-                ijloop = [(i,i) for i in range(self.n_skip_a) for j in range(self.n_skip_b)]
+                ijloop = [(i,j) for i in range(self.n_skip_a) for j in range(self.n_skip_b)]
                 
             for i,j in ijloop:
                 mixed_samples = np.concatenate(
@@ -490,8 +490,9 @@ class mixed_sample_test:
                 consec_nbour_list.append(R[1])
 
                 # post processing
-                T_list.append((self.n_k*(self.n))**-1 * R[0])
-                p_value_T_list.append(self._calculate_p_val(T_list[-1], self.mu_T, self.sigma_T))
+                T = (self.n_k*(self.n))**-1 * R[0]
+                T_list.append(T)
+                p_value_T_list.append(self._calculate_p_val(T, self.mu_T, self.sigma_T))
                 
             # collect results
             self.neighbour_same_class = np.median(nbour_same_class_list)
@@ -499,7 +500,9 @@ class mixed_sample_test:
             
             # post processing
             self.T = np.median(T_list)
-            self.p_value = np.median(p_value_T_list)
+            self.p_value = p = np.mean(p_value_T_list)
+            self.p_value_T_list = p_value_T_list
+            self.p_value_error = (p*(1-p)/(len(p_value_T_list)))**0.5
             
             # store lists too
             self._T_list = T_list
