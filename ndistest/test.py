@@ -500,9 +500,8 @@ class mixed_sample_test:
             
             # post processing
             self.T = np.median(T_list)
-            self.p_value = p = np.mean(p_value_T_list)
+            self.p_value = p = np.median(p_value_T_list)
             self.p_value_T_list = p_value_T_list
-            self.p_value_error = (p*(1-p)/(len(p_value_T_list)))**0.5
             
             # store lists too
             self._T_list = T_list
